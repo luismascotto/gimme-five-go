@@ -18,26 +18,27 @@ import (
 var wordsAlphaTxt []byte
 
 // fiveLetterWords is populated once at startup from the embedded file.
-var fiveLetterWords []string
+// The capacity is set to the number of words in the file to avoid reallocations. For this case, 5 letter words, there are approximately 15900 words.
+var fiveLetterWords []string = make([]string, 0, 16000)
 
 // Roll delays (ms): accelerate, sustain, then slow to stop (roulette feel).
-var rollDelaysMs = []int{1000, 900, 800, 700, 600, 500, 400, 400, 400, 450, 550, 680, 800, 1000, 1500, 2000}
+var rollDelaysMs = []int{700, 600, 500, 400, 300, 300, 300, 300, 400, 500, 600, 700, 800, 1000, 1100, 100}
 
-const wordsPerRound = 16
+const defaultWordsPerRound = 16
 
 func init() {
 	sc := bufio.NewScanner(bytes.NewReader(wordsAlphaTxt))
 	for sc.Scan() {
-		w := strings.TrimSpace(sc.Text())
-		if len(w) == 5 && isAlpha(w) {
-			fiveLetterWords = append(fiveLetterWords, strings.ToLower(w))
+		uppWord := strings.ToUpper(strings.TrimSpace(sc.Text()))
+		if len(uppWord) == 5 && isUppercaseAlpha(uppWord) {
+			fiveLetterWords = append(fiveLetterWords, uppWord)
 		}
 	}
 }
 
-func isAlpha(s string) bool {
+func isUppercaseAlpha(s string) bool {
 	for _, c := range s {
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
+		if c < 'A' || c > 'Z' {
 			return false
 		}
 	}
@@ -112,13 +113,17 @@ func (m model) Init() tea.Cmd {
 	return tea.Tick(0, func(time.Time) tea.Msg { return startRoundMsg{} })
 }
 
-// beginRound prepares the next 16 indices and returns the first tick Cmd.
-func (m *model) beginRound() tea.Cmd {
+// beginRound prepares the next wordsPerRound indices and returns the first tick Cmd.
+func (m *model) beginRound(wordsPerRound int) tea.Cmd {
 	m.pool.ensureCapacity(wordsPerRound)
 	m.roundIdx = m.pool.take(wordsPerRound)
 	m.step = 0
 	m.state = "rolling"
-	return tea.Tick(time.Duration(rollDelaysMs[0])*time.Millisecond, func(t time.Time) tea.Msg {
+	delayMs := rollDelaysMs[0]
+	if wordsPerRound == 1 {
+		delayMs = 50
+	}
+	return tea.Tick(time.Duration(delayMs)*time.Millisecond, func(t time.Time) tea.Msg {
 		return rollTickMsg{t: t}
 	})
 }
@@ -137,7 +142,7 @@ func (m model) currentWord() string {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case startRoundMsg:
-		return m, m.beginRound()
+		return m, m.beginRound(defaultWordsPerRound)
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -145,7 +150,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			if m.state == "stopped" {
-				cmd := m.beginRound()
+				cmd := m.beginRound(defaultWordsPerRound)
 				return m, cmd
 			}
 			return m, nil
@@ -156,19 +161,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		btn := msg.Button
 		if (btn == tea.MouseButtonWheelUp || btn == tea.MouseButtonWheelDown) && m.state == "stopped" {
-			cmd := m.beginRound()
+			cmd := m.beginRound(1)
 			return m, cmd
 		}
 		return m, nil
 
 	case rollTickMsg:
 		m.step++
-		if m.step >= wordsPerRound {
-			m.step = wordsPerRound - 1
+		if m.step >= len(m.roundIdx) {
+			m.step = len(m.roundIdx) - 1
 			m.state = "stopped"
 			return m, nil
 		}
 		delayMs := rollDelaysMs[m.step]
+		if m.step+1 >= len(m.roundIdx) {
+			delayMs = 50
+		}
 		return m, tea.Tick(time.Duration(delayMs)*time.Millisecond, func(t time.Time) tea.Msg {
 			return rollTickMsg{t: t}
 		})
@@ -179,11 +187,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 var (
 	wordStyleRolling = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#E8E8E8")).
-			Background(lipgloss.Color("#1a1a2e")).
-			Padding(0, 2).
-			Margin(1, 0)
+				Bold(true).
+				Foreground(lipgloss.Color("#E8E8E8")).
+				Background(lipgloss.Color("#1a1a2e")).
+				Padding(0, 2).
+				Margin(1, 0)
 	wordStyleFinal = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#00FF87")).
@@ -198,7 +206,7 @@ var (
 func (m model) View() string {
 	w := m.currentWord()
 	if w == "" && m.state == "stopped" && len(m.roundIdx) > 0 {
-		w = m.words[m.roundIdx[wordsPerRound-1]]
+		w = m.words[m.roundIdx[defaultWordsPerRound-1]]
 	}
 	if w == "" {
 		w = "-----"
@@ -212,8 +220,8 @@ func (m model) View() string {
 	}
 
 	// Fixed-width block so the word stays in the same place during roll
-	block := style.Render(strings.ToUpper(w))
-	hint := hintStyle.Render("Enter or scroll → new round   ·   q / Esc → quit")
+	block := style.Render(w)
+	hint := hintStyle.Render("Enter → new round   ·   mouse wheel → next   ·   q / Esc → quit")
 	return lipgloss.Place(80, 12, lipgloss.Center, lipgloss.Center, block+"\n\n"+hint, lipgloss.WithWhitespaceChars(" "))
 }
 
