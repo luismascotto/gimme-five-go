@@ -117,4 +117,4 @@ The app expects a file **`words_alpha.txt`** in the project root at **build time
 
 ## License
 
-Same as the project (if none specified, assume MIT or project default).
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0). See the [LICENSE](LICENSE) file for details.

@@ -226,7 +226,6 @@ func (m model) View() string {
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
 	p := tea.NewProgram(initialModel(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		panic(err)
