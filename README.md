@@ -20,7 +20,7 @@ On start, the app runs a “roll”: 16 words flash in sequence in the same spot
 
 3. **Round**
    For each round, 16 indices are taken from the pool. The app shows the corresponding words **one after another in the same place**, with fixed delays (in ms):
-   `1000, 900, 800, 700, 600, 500, 400, 400, 400, 450, 550, 680, 800, 1000, 1500, 2000`
+   `700, 600, 500, 400, 300, 300, 300, 300, 400, 500, 600, 700, 800, 1000, 1100, 100`
    so the animation **accelerates**, then **slows to a stop** (roulette/slot-machine feel).
 
 4. **UI**
